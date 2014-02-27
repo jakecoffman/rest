@@ -33,6 +33,7 @@ func (fn handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Message), err.Code)
 		return
 	}
+	// returning nil is not ok because I don't know if I should return {} or []
 	if response == nil {
 		log.Printf("ERROR: response from method is nil\n")
 		http.Error(w, "Internal server error. Check the logs.", http.StatusInternalServerError)
@@ -52,8 +53,9 @@ func (fn handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s %s %s %d", r.RemoteAddr, r.Method, r.URL, 200)
 }
 
-func appHandler(w http.ResponseWriter, r *http.Request) {
-
+func rootHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "static/index.html")
+	log.Printf("%s %s %s %d", r.RemoteAddr, r.Method, r.URL, 200)
 }
 
 func main() {
@@ -68,9 +70,7 @@ func main() {
 
 	// setup routes
 	router := mux.NewRouter()
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "static/index.html")
-	})
+	router.HandleFunc("/", rootHandler)
 	// REST routes go here
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static", fileHandler))
 	http.Handle("/", router)
