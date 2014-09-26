@@ -1,84 +1,108 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
-	"flag"
-	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-// error response contains everything we need to use http.Error
-type handlerError struct {
-	Error   error
-	Message string
-	Code    int
+type context struct {
+	db *sql.DB
 }
 
-// a custom type that we can use for handling errors and formatting responses
-type handler func(w http.ResponseWriter, r *http.Request) (interface{}, *handlerError)
+type appHandler struct {
+	*context
+	handler func(*context, http.ResponseWriter, *http.Request) (int, interface{})
+}
 
-// attach the standard ServeHTTP method to our handler so the http library can call it
-func (fn handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// here we could do some prep work before calling the handler if we wanted to
-
-	// call the actual handler
-	response, err := fn(w, r)
-
-	// check for errors
-	if err != nil {
-		log.Printf("ERROR: %v\n", err.Error)
-		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Message), err.Code)
-		return
-	}
-	// returning nil is not ok because I don't know if I should return {} or []
-	if response == nil {
-		log.Printf("ERROR: response from method is nil\n")
-		http.Error(w, "Internal server error. Check the logs.", http.StatusInternalServerError)
-		return
-	}
-
-	// turn the response into JSON
-	bytes, e := json.Marshal(response)
-	if e != nil {
-		http.Error(w, "Error marshalling JSON", http.StatusInternalServerError)
-		return
-	}
-
-	// send the response and log
+func (t appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	code, data := t.handler(t.context, w, r)
+	w.WriteHeader(code)
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(bytes)
-	log.Printf("%s %s %s %d", r.RemoteAddr, r.Method, r.URL, 200)
-}
-
-func rootHandler(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "static/index.html")
-	log.Printf("%s %s %s %d", r.RemoteAddr, r.Method, r.URL, 200)
+	encoder := json.NewEncoder(w)
+	err := encoder.Encode(data)
+	if err != nil {
+		log.Println("Failed to write data:", err)
+	}
+	log.Println(r.URL, "-", r.Method, "-", code, r.RemoteAddr)
 }
 
 func main() {
-	// command line flags
-	port := flag.Int("port", 80, "port to serve on")
-	dir := flag.String("directory", "static/", "directory of web files")
-	flag.Parse()
+	wd, err := os.Getwd()
+	check(err)
+	log.Println("Working directory", wd)
 
-	// handle all requests by serving a file of the same name
-	fs := http.Dir(*dir)
-	fileHandler := http.FileServer(fs)
+	os.Remove("./sqlite.db")
+	db, err := sql.Open("sqlite3", "./sqlite.db")
+	check(err)
+	defer db.Close()
 
-	// setup routes
-	router := mux.NewRouter()
-	router.HandleFunc("/", rootHandler)
-	// REST routes go here
-	router.PathPrefix("/static/").Handler(http.StripPrefix("/static", fileHandler))
-	http.Handle("/", router)
+	_, err = db.Exec(`create table things (id integer not null primary key, name text);`)
+	check(err)
 
-	log.Printf("Running on port %d\n", *port)
+	_, err = db.Exec("insert into things(name) values ('bob')")
+	check(err)
 
-	addr := fmt.Sprintf("127.0.0.1:%d", *port)
-	// this call blocks -- the progam runs here forever
-	err := http.ListenAndServe(addr, nil)
-	fmt.Println(err.Error())
+	appCtx := &context{db}
+
+	r := mux.NewRouter()
+	r.Handle("/things", appHandler{appCtx, List})
+	r.Handle("/things", appHandler{appCtx, Add})
+	r.Handle("/things/{id}", appHandler{appCtx, Get})
+	r.Handle("/things/{id}", appHandler{appCtx, Update})
+	r.Handle("/things/{id}", appHandler{appCtx, Delete})
+	http.ListenAndServe("0.0.0.0:8070", r)
+}
+
+type Thing struct {
+	Id   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+func List(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+	rows, err := c.db.Query("select id, name from things")
+	check(err)
+	defer rows.Close()
+
+	things := []*Thing{}
+	for rows.Next() {
+		thing := &Thing{}
+		rows.Scan(&thing.Id, &thing.Name)
+		things = append(things, thing)
+	}
+
+	return http.StatusOK, things
+}
+
+func Add(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+	stmt, err := c.db.Prepare("insert into things (name) values (?)")
+	return http.StatusCreated, map[string]interface{}{"data": "1"}
+}
+
+func Get(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+	vars := mux.Vars(r)
+	// Get a specific item from the database
+	return http.StatusOK, map[string]interface{}{"data": vars["id"]}
+}
+
+func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+	vars := mux.Vars(r)
+	// Update an item in the database
+	return http.StatusOK, map[string]interface{}{"data": vars["id"]}
+}
+
+func Delete(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+	vars := mux.Vars(r)
+	return http.StatusOK, map[string]string{"data": vars["id"]}
+}
+
+func check(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
