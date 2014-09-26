@@ -1,6 +1,9 @@
 golang-rest-bootstrap
 =====================
 
+[![Build Status](https://secure.travis-ci.org/jakecoffman/golang-rest-bootstrap.png?branch=master)](http://travis-ci.org/jakecoffman/golang-rest-bootstrap)
+
+
 Bootstrap a RESTful web server in Golang
 
 ```
