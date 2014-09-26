@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"github.com/gorilla/mux"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+type Map map[string]interface{}
 
 type context struct {
 	db *sql.DB
@@ -32,6 +35,18 @@ func (t appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Println(r.URL, "-", r.Method, "-", code, r.RemoteAddr)
 }
 
+func router(appCtx *context) *mux.Router {
+	r := mux.NewRouter()
+	// There are actually 2 options here: 1 - have 2 functions that handle both cases and
+	// internally switch on the method or 2 - have a function for each method
+	r.Handle("/things", appHandler{appCtx, List}).Methods("GET")
+	r.Handle("/things", appHandler{appCtx, Add}).Methods("POST")
+	r.Handle("/things/{id}", appHandler{appCtx, Get}).Methods("GET")
+	r.Handle("/things/{id}", appHandler{appCtx, Update}).Methods("PUT")
+	r.Handle("/things/{id}", appHandler{appCtx, Delete}).Methods("DELETE")
+	return r
+}
+
 func main() {
 	wd, err := os.Getwd()
 	check(err)
@@ -49,18 +64,12 @@ func main() {
 	check(err)
 
 	appCtx := &context{db}
-
-	r := mux.NewRouter()
-	r.Handle("/things", appHandler{appCtx, List})
-	r.Handle("/things", appHandler{appCtx, Add})
-	r.Handle("/things/{id}", appHandler{appCtx, Get})
-	r.Handle("/things/{id}", appHandler{appCtx, Update})
-	r.Handle("/things/{id}", appHandler{appCtx, Delete})
+	r := router(appCtx)
 	http.ListenAndServe("0.0.0.0:8070", r)
 }
 
 type Thing struct {
-	Id   int    `json:"id"`
+	Id   int64  `json:"id"`
 	Name string `json:"name"`
 }
 
@@ -80,29 +89,82 @@ func List(c *context, w http.ResponseWriter, r *http.Request) (int, interface{})
 }
 
 func Add(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
-	stmt, err := c.db.Prepare("insert into things (name) values (?)")
-	return http.StatusCreated, map[string]interface{}{"data": "1"}
+	decoder := json.NewDecoder(r.Body)
+	var thing Thing
+	err := decoder.Decode(&thing)
+	if err != nil {
+		return http.StatusBadRequest, Map{"error": "can't parse json payload"}
+	}
+	if thing.Name == "" {
+		return 422, Map{"error": "please provide 'name'"}
+	}
+
+	stmt, err := c.db.Prepare("insert into things (name) values (?)") // TODO: limit
+	check(err)
+	result, err := stmt.Exec(thing.Name)
+	check(err)
+	id, err := result.LastInsertId()
+	check(err)
+	thing.Id = id
+	return http.StatusCreated, thing
 }
 
 func Get(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	vars := mux.Vars(r)
-	// Get a specific item from the database
-	return http.StatusOK, map[string]interface{}{"data": vars["id"]}
+
+	stmt, err := c.db.Prepare("select id, name from things where id=?")
+	check(err)
+	var thing Thing
+	err = stmt.QueryRow(vars["id"]).Scan(&thing.Id, &thing.Name)
+	check(err)
+
+	return http.StatusOK, thing
 }
 
 func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	vars := mux.Vars(r)
-	// Update an item in the database
-	return http.StatusOK, map[string]interface{}{"data": vars["id"]}
+	decoder := json.NewDecoder(r.Body)
+	var thing Thing
+	err := decoder.Decode(&thing)
+	if err != nil {
+		return http.StatusBadRequest, Map{"error": "can't parse json payload"}
+	}
+	if thing.Name == "" {
+		return 422, Map{"error": "name can't be blank"}
+	}
+
+	stmt, err := c.db.Prepare("update things set name=? where id=?")
+	check(err)
+	result, err := stmt.Exec(thing.Name, vars["id"])
+	check(err)
+	i, err := result.RowsAffected()
+	check(err)
+	if i == 0 {
+		return http.StatusNotFound, Map{"error": fmt.Sprintf("can't find thing with id %v", i)}
+	}
+
+	return http.StatusOK, map[string]string{"id": vars["id"]}
 }
 
 func Delete(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	vars := mux.Vars(r)
-	return http.StatusOK, map[string]string{"data": vars["id"]}
+
+	stmt, err := c.db.Prepare("delete from things where id=?")
+	check(err)
+	result, err := stmt.Exec(vars["id"])
+	check(err)
+	i, err := result.RowsAffected()
+	check(err)
+	if i == 0 {
+		return http.StatusNotFound, Map{"error": fmt.Sprintf("can't find thing with id %v", i)}
+	}
+
+	return http.StatusOK, Map{"id": vars["id"]}
 }
 
+// TODO: Only panic on errors that are unrecoverable as the server goes down.
 func check(err error) {
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
