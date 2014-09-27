@@ -7,12 +7,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime/debug"
 
 	"github.com/gorilla/mux"
 	_ "github.com/mattn/go-sqlite3"
 )
-
-type Map map[string]interface{}
 
 type context struct {
 	db *sql.DB
@@ -27,8 +26,7 @@ func (t appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	code, data := t.handler(t.context, w, r)
 	w.WriteHeader(code)
 	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-	err := encoder.Encode(data)
+	err := json.NewEncoder(w).Encode(data)
 	if err != nil {
 		log.Println("Failed to write data:", err)
 	}
@@ -73,6 +71,10 @@ type Thing struct {
 	Name string `json:"name"`
 }
 
+type Error struct {
+	Error string `json:"error"`
+}
+
 func List(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	rows, err := c.db.Query("select id, name from things")
 	check(err)
@@ -89,14 +91,17 @@ func List(c *context, w http.ResponseWriter, r *http.Request) (int, interface{})
 }
 
 func Add(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+	if r.Body == nil {
+		return http.StatusBadRequest, Error{"no payload"}
+	}
 	decoder := json.NewDecoder(r.Body)
 	var thing Thing
 	err := decoder.Decode(&thing)
 	if err != nil {
-		return http.StatusBadRequest, Map{"error": "can't parse json payload"}
+		return http.StatusBadRequest, Error{"can't parse json payload"}
 	}
 	if thing.Name == "" {
-		return 422, Map{"error": "please provide 'name'"}
+		return 422, Error{"please provide 'name'"}
 	}
 
 	stmt, err := c.db.Prepare("insert into things (name) values (?)") // TODO: limit
@@ -122,15 +127,17 @@ func Get(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) 
 }
 
 func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+	if r.Body == nil {
+		return http.StatusBadRequest, Error{"no payload"}
+	}
 	vars := mux.Vars(r)
-	decoder := json.NewDecoder(r.Body)
 	var thing Thing
-	err := decoder.Decode(&thing)
+	err := json.NewDecoder(r.Body).Decode(&thing)
 	if err != nil {
-		return http.StatusBadRequest, Map{"error": "can't parse json payload"}
+		return http.StatusBadRequest, Error{"can't parse json payload"}
 	}
 	if thing.Name == "" {
-		return 422, Map{"error": "name can't be blank"}
+		return 422, Error{"please provide 'name'"}
 	}
 
 	stmt, err := c.db.Prepare("update things set name=? where id=?")
@@ -140,7 +147,7 @@ func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{
 	i, err := result.RowsAffected()
 	check(err)
 	if i == 0 {
-		return http.StatusNotFound, Map{"error": fmt.Sprintf("can't find thing with id %v", i)}
+		return http.StatusNotFound, Error{fmt.Sprintf("can't find thing with id %v", vars["id"])}
 	}
 
 	return http.StatusOK, map[string]string{"id": vars["id"]}
@@ -156,15 +163,17 @@ func Delete(c *context, w http.ResponseWriter, r *http.Request) (int, interface{
 	i, err := result.RowsAffected()
 	check(err)
 	if i == 0 {
-		return http.StatusNotFound, Map{"error": fmt.Sprintf("can't find thing with id %v", i)}
+		return http.StatusNotFound, Error{fmt.Sprintf("can't find thing with id %v", vars["id"])}
 	}
 
-	return http.StatusOK, Map{"id": vars["id"]}
+	return http.StatusOK, map[string]string{"id": vars["id"]}
 }
 
-// TODO: Only panic on errors that are unrecoverable as the server goes down.
+// TODO: Only call on errors that are unrecoverable as the server goes down
 func check(err error) {
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		debug.PrintStack()
+		log.Fatal()
 	}
 }

@@ -56,6 +56,32 @@ var data = []struct {
 				WithArgs("3").
 				WillReturnResult(sqlmock.NewResult(0, 1))
 		}, 200, `{"id":"3"}`,
+	}, {
+		"/things", "POST", nil, func() {}, 400, `{"error":"no payload"}`,
+	}, {
+		"/things", "POST", strings.NewReader(`{"name":`), func() {}, 400, `{"error":"can't parse json payload"}`,
+	}, {
+		"/things", "POST", strings.NewReader(`{"name":""}`), func() {}, 422, `{"error":"please provide 'name'"}`,
+	}, {
+		"/things/4", "PUT", nil, func() {}, 400, `{"error":"no payload"}`,
+	}, {
+		"/things/4", "PUT", strings.NewReader(`{"name":`), func() {}, 400, `{"error":"can't parse json payload"}`,
+	}, {
+		"/things/4", "PUT", strings.NewReader(`{"name":""}`), func() {}, 422, `{"error":"please provide 'name'"}`,
+	}, {
+		"/things/4", "PUT", strings.NewReader(`{"name":"asdf"}`), func() {
+			sqlmock.ExpectPrepare()
+			sqlmock.ExpectExec("update things set name=\\? where id=\\?").
+				WithArgs("asdf", "4").
+				WillReturnResult(sqlmock.NewResult(0, 0))
+		}, 404, `{"error":"can't find thing with id 4"}`,
+	}, {
+		"/things/6", "DELETE", strings.NewReader(`{"name":"asdf"}`), func() {
+			sqlmock.ExpectPrepare()
+			sqlmock.ExpectExec("delete from things where id=\\?").
+				WithArgs("6").
+				WillReturnResult(sqlmock.NewResult(0, 0))
+		}, 404, `{"error":"can't find thing with id 6"}`,
 	},
 }
 
@@ -70,10 +96,10 @@ func TestAllTheThings(t *testing.T) {
 		d.expectations()
 		router(&context{db}).ServeHTTP(w, r)
 		if w.Code != d.expectedCode {
-			t.Fatalf("expected %v got %v", d.expectedCode, w.Code)
+			t.Errorf("expected %v got %v", d.expectedCode, w.Code)
 		}
 		if strings.TrimSpace(w.Body.String()) != d.expectedBody {
-			t.Fatalf("expected %v got %v", d.expectedBody, w.Body.String())
+			t.Errorf("expected %v got %v", d.expectedBody, w.Body.String())
 		}
 	}
 }
