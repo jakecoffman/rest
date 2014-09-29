@@ -159,7 +159,7 @@ func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{
 	i, err := result.RowsAffected()
 	check(err)
 	if i == 0 {
-		return http.StatusNotFound, Error{fmt.Sprintf("can't find User with id %v", vars["id"])}
+		return http.StatusNotFound, Error{fmt.Sprintf("can't find user with id %v", vars["id"])}
 	}
 
 	return http.StatusOK, map[string]string{"id": vars["id"]}
@@ -175,7 +175,7 @@ func Delete(c *context, w http.ResponseWriter, r *http.Request) (int, interface{
 	i, err := result.RowsAffected()
 	check(err)
 	if i == 0 {
-		return http.StatusNotFound, Error{fmt.Sprintf("can't find User with id %v", vars["id"])}
+		return http.StatusNotFound, Error{fmt.Sprintf("can't find user with id %v", vars["id"])}
 	}
 
 	return http.StatusOK, map[string]string{"id": vars["id"]}

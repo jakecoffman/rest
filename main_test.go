@@ -10,7 +10,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
-var thingColumns = []string{"o_id", "o_name"}
+var userColumns = []string{"o_id", "o_name"}
 
 var data = []struct {
 	url          string
@@ -21,71 +21,71 @@ var data = []struct {
 	expectedBody string
 }{
 	{
-		"/things", "GET", nil, func() {
-			sqlmock.ExpectQuery("select id, name from things").
-				WillReturnRows(sqlmock.NewRows(thingColumns).
+		"/users", "GET", nil, func() {
+			sqlmock.ExpectQuery("select id, name from users").
+				WillReturnRows(sqlmock.NewRows(userColumns).
 				FromCSVString("1,Bob\n2,Ted"))
 		}, 200, `[{"id":1,"name":"Bob"},{"id":2,"name":"Ted"}]`,
 	},
 	{
-		"/things", "POST", strings.NewReader(`{"name":"test"}`), func() {
+		"/users", "POST", strings.NewReader(`{"name":"test"}`), func() {
 			sqlmock.ExpectPrepare()
-			sqlmock.ExpectExec("insert into things \\(name\\) values \\(\\?\\)").
+			sqlmock.ExpectExec("insert into users \\(name\\) values \\(\\?\\)").
 				WithArgs("test").
 				WillReturnResult(sqlmock.NewResult(7, 1))
 		}, 201, `{"id":7,"name":"test"}`,
 	},
 	{
-		"/things/3", "GET", nil, func() {
+		"/users/3", "GET", nil, func() {
 			sqlmock.ExpectPrepare()
 			// TODO: I can't .WithArgs("3") here for some reason with the QueryRow call
-			sqlmock.ExpectQuery("select id, name from things where id=\\?").
-				WillReturnRows(sqlmock.NewRows(thingColumns).AddRow(3, "Jim"))
+			sqlmock.ExpectQuery("select id, name from users where id=\\?").
+				WillReturnRows(sqlmock.NewRows(userColumns).AddRow(3, "Jim"))
 		}, 200, `{"id":3,"name":"Jim"}`,
 	}, {
-		"/things/2", "PUT", strings.NewReader(`{"name":"Bob"}`), func() {
+		"/users/2", "PUT", strings.NewReader(`{"name":"Bob"}`), func() {
 			sqlmock.ExpectPrepare()
-			sqlmock.ExpectExec("update things set name=\\? where id=\\?").
+			sqlmock.ExpectExec("update users set name=\\? where id=\\?").
 				WithArgs("Bob", "2").
 				WillReturnResult(sqlmock.NewResult(0, 1))
 		}, 200, `{"id":"2"}`,
 	}, {
-		"/things/3", "DELETE", nil, func() {
+		"/users/3", "DELETE", nil, func() {
 			sqlmock.ExpectPrepare()
-			sqlmock.ExpectExec("delete from things where id=\\?").
+			sqlmock.ExpectExec("delete from users where id=\\?").
 				WithArgs("3").
 				WillReturnResult(sqlmock.NewResult(0, 1))
 		}, 200, `{"id":"3"}`,
 	}, {
-		"/things", "POST", nil, func() {}, 400, `{"error":"no payload"}`,
+		"/users", "POST", nil, func() {}, 400, `{"error":"no payload"}`,
 	}, {
-		"/things", "POST", strings.NewReader(`{"name":`), func() {}, 400, `{"error":"can't parse json payload"}`,
+		"/users", "POST", strings.NewReader(`{"name":`), func() {}, 400, `{"error":"can't parse json payload"}`,
 	}, {
-		"/things", "POST", strings.NewReader(`{"name":""}`), func() {}, 422, `{"error":"please provide 'name'"}`,
+		"/users", "POST", strings.NewReader(`{"name":""}`), func() {}, 422, `{"error":"please provide 'name'"}`,
 	}, {
-		"/things/4", "PUT", nil, func() {}, 400, `{"error":"no payload"}`,
+		"/users/4", "PUT", nil, func() {}, 400, `{"error":"no payload"}`,
 	}, {
-		"/things/4", "PUT", strings.NewReader(`{"name":`), func() {}, 400, `{"error":"can't parse json payload"}`,
+		"/users/4", "PUT", strings.NewReader(`{"name":`), func() {}, 400, `{"error":"can't parse json payload"}`,
 	}, {
-		"/things/4", "PUT", strings.NewReader(`{"name":""}`), func() {}, 422, `{"error":"please provide 'name'"}`,
+		"/users/4", "PUT", strings.NewReader(`{"name":""}`), func() {}, 422, `{"error":"please provide 'name'"}`,
 	}, {
-		"/things/4", "PUT", strings.NewReader(`{"name":"asdf"}`), func() {
+		"/users/4", "PUT", strings.NewReader(`{"name":"asdf"}`), func() {
 			sqlmock.ExpectPrepare()
-			sqlmock.ExpectExec("update things set name=\\? where id=\\?").
+			sqlmock.ExpectExec("update users set name=\\? where id=\\?").
 				WithArgs("asdf", "4").
 				WillReturnResult(sqlmock.NewResult(0, 0))
-		}, 404, `{"error":"can't find thing with id 4"}`,
+		}, 404, `{"error":"can't find user with id 4"}`,
 	}, {
-		"/things/6", "DELETE", strings.NewReader(`{"name":"asdf"}`), func() {
+		"/users/6", "DELETE", strings.NewReader(`{"name":"asdf"}`), func() {
 			sqlmock.ExpectPrepare()
-			sqlmock.ExpectExec("delete from things where id=\\?").
+			sqlmock.ExpectExec("delete from users where id=\\?").
 				WithArgs("6").
 				WillReturnResult(sqlmock.NewResult(0, 0))
-		}, 404, `{"error":"can't find thing with id 6"}`,
+		}, 404, `{"error":"can't find user with id 6"}`,
 	},
 }
 
-func TestAllTheThings(t *testing.T) {
+func TestAllTheusers(t *testing.T) {
 	for _, d := range data {
 		w := httptest.NewRecorder()
 		r, err := http.NewRequest(d.method, d.url, d.reqBody)
