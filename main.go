@@ -3,15 +3,19 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"runtime/debug"
 
 	"github.com/gorilla/mux"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+func init() {
+	flag.Parse()
+}
 
 type context struct {
 	db *sql.DB
@@ -37,36 +41,44 @@ func router(appCtx *context) *mux.Router {
 	r := mux.NewRouter()
 	// There are actually 2 options here: 1 - have 2 functions that handle both cases and
 	// internally switch on the method or 2 - have a function for each method
-	r.Handle("/things", appHandler{appCtx, List}).Methods("GET")
-	r.Handle("/things", appHandler{appCtx, Add}).Methods("POST")
-	r.Handle("/things/{id}", appHandler{appCtx, Get}).Methods("GET")
-	r.Handle("/things/{id}", appHandler{appCtx, Update}).Methods("PUT")
-	r.Handle("/things/{id}", appHandler{appCtx, Delete}).Methods("DELETE")
+	r.Handle("/users", appHandler{appCtx, List}).Methods("GET")
+	r.Handle("/users", appHandler{appCtx, Add}).Methods("POST")
+	r.Handle("/users/{id}", appHandler{appCtx, Get}).Methods("GET")
+	r.Handle("/users/{id}", appHandler{appCtx, Update}).Methods("PUT")
+	r.Handle("/users/{id}", appHandler{appCtx, Delete}).Methods("DELETE")
 	return r
 }
 
 func main() {
-	wd, err := os.Getwd()
-	check(err)
-	log.Println("Working directory", wd)
-
-	os.Remove("./sqlite.db")
-	db, err := sql.Open("sqlite3", "./sqlite.db")
+	db, err := sql.Open("sqlite3", "./gorunner.db")
 	check(err)
 	defer db.Close()
 
-	_, err = db.Exec(`create table things (id integer not null primary key, name text);`)
+	// Bootstrap database
+	_, err = db.Exec(`create table if not exists users (
+		id integer not null primary key,
+		name text,
+		CHECK(name <> ''),
+		UNIQUE(id, name)
+	);`)
+	check(err)
+	_, err = db.Exec("insert or ignore into users values (1, 'admin')")
 	check(err)
 
-	_, err = db.Exec("insert into things(name) values ('bob')")
-	check(err)
+	// handle all requests by serving a file of the same name
+	fileHandler := http.FileServer(http.Dir("static/"))
 
-	appCtx := &context{db}
-	r := router(appCtx)
+	r := router(&context{db})
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/index.html")
+	})
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static", fileHandler))
+
+	log.Println("Serving on", "0.0.0.0:8070")
 	http.ListenAndServe("0.0.0.0:8070", r)
 }
 
-type Thing struct {
+type User struct {
 	Id   int64  `json:"id"`
 	Name string `json:"name"`
 }
@@ -76,18 +88,18 @@ type Error struct {
 }
 
 func List(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
-	rows, err := c.db.Query("select id, name from things")
+	rows, err := c.db.Query("select id, name from users")
 	check(err)
 	defer rows.Close()
 
-	things := []*Thing{}
+	users := []*User{}
 	for rows.Next() {
-		thing := &Thing{}
-		rows.Scan(&thing.Id, &thing.Name)
-		things = append(things, thing)
+		User := &User{}
+		rows.Scan(&User.Id, &User.Name)
+		users = append(users, User)
 	}
 
-	return http.StatusOK, things
+	return http.StatusOK, users
 }
 
 func Add(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
@@ -95,35 +107,35 @@ func Add(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) 
 		return http.StatusBadRequest, Error{"no payload"}
 	}
 	decoder := json.NewDecoder(r.Body)
-	var thing Thing
-	err := decoder.Decode(&thing)
+	var User User
+	err := decoder.Decode(&User)
 	if err != nil {
 		return http.StatusBadRequest, Error{"can't parse json payload"}
 	}
-	if thing.Name == "" {
+	if User.Name == "" {
 		return 422, Error{"please provide 'name'"}
 	}
 
-	stmt, err := c.db.Prepare("insert into things (name) values (?)") // TODO: limit
+	stmt, err := c.db.Prepare("insert into users (name) values (?)") // TODO: limit
 	check(err)
-	result, err := stmt.Exec(thing.Name)
+	result, err := stmt.Exec(User.Name)
 	check(err)
 	id, err := result.LastInsertId()
 	check(err)
-	thing.Id = id
-	return http.StatusCreated, thing
+	User.Id = id
+	return http.StatusCreated, User
 }
 
 func Get(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	vars := mux.Vars(r)
 
-	stmt, err := c.db.Prepare("select id, name from things where id=?")
+	stmt, err := c.db.Prepare("select id, name from users where id=?")
 	check(err)
-	var thing Thing
-	err = stmt.QueryRow(vars["id"]).Scan(&thing.Id, &thing.Name)
+	var User User
+	err = stmt.QueryRow(vars["id"]).Scan(&User.Id, &User.Name)
 	check(err)
 
-	return http.StatusOK, thing
+	return http.StatusOK, User
 }
 
 func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
@@ -131,23 +143,23 @@ func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{
 		return http.StatusBadRequest, Error{"no payload"}
 	}
 	vars := mux.Vars(r)
-	var thing Thing
-	err := json.NewDecoder(r.Body).Decode(&thing)
+	var User User
+	err := json.NewDecoder(r.Body).Decode(&User)
 	if err != nil {
 		return http.StatusBadRequest, Error{"can't parse json payload"}
 	}
-	if thing.Name == "" {
+	if User.Name == "" {
 		return 422, Error{"please provide 'name'"}
 	}
 
-	stmt, err := c.db.Prepare("update things set name=? where id=?")
+	stmt, err := c.db.Prepare("update users set name=? where id=?")
 	check(err)
-	result, err := stmt.Exec(thing.Name, vars["id"])
+	result, err := stmt.Exec(User.Name, vars["id"])
 	check(err)
 	i, err := result.RowsAffected()
 	check(err)
 	if i == 0 {
-		return http.StatusNotFound, Error{fmt.Sprintf("can't find thing with id %v", vars["id"])}
+		return http.StatusNotFound, Error{fmt.Sprintf("can't find User with id %v", vars["id"])}
 	}
 
 	return http.StatusOK, map[string]string{"id": vars["id"]}
@@ -156,14 +168,14 @@ func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{
 func Delete(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	vars := mux.Vars(r)
 
-	stmt, err := c.db.Prepare("delete from things where id=?")
+	stmt, err := c.db.Prepare("delete from users where id=?")
 	check(err)
 	result, err := stmt.Exec(vars["id"])
 	check(err)
 	i, err := result.RowsAffected()
 	check(err)
 	if i == 0 {
-		return http.StatusNotFound, Error{fmt.Sprintf("can't find thing with id %v", vars["id"])}
+		return http.StatusNotFound, Error{fmt.Sprintf("can't find User with id %v", vars["id"])}
 	}
 
 	return http.StatusOK, map[string]string{"id": vars["id"]}
