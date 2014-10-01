@@ -46,6 +46,7 @@ func router(appCtx *context) *mux.Router {
 	r.Handle("/users/{id}", appHandler{appCtx, Get}).Methods("GET")
 	r.Handle("/users/{id}", appHandler{appCtx, Update}).Methods("PUT")
 	r.Handle("/users/{id}", appHandler{appCtx, Delete}).Methods("DELETE")
+	r.NotFoundHandler = http.HandlerFunc(NotFound)
 	return r
 }
 
@@ -188,4 +189,10 @@ func check(err error) {
 		debug.PrintStack()
 		log.Fatal()
 	}
+}
+
+func NotFound(w http.ResponseWriter, r *http.Request) {
+	url := "/"
+	http.Redirect(w, r, url, http.StatusFound)
+	return
 }
