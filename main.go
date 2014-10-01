@@ -131,11 +131,16 @@ func Get(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) 
 
 	stmt, err := c.db.Prepare("select id, name from users where id=?")
 	check(err)
-	var User User
-	err = stmt.QueryRow(vars["id"]).Scan(&User.Id, &User.Name)
+	var user User
+	rows, err := stmt.Query(vars["id"])
 	check(err)
+	defer rows.Close()
+	if !rows.Next() {
+		return http.StatusNotFound, Error{fmt.Sprintf("can't find user with id %v", vars["id"])}
+	}
+	check(rows.Scan(&user.Id, &user.Name))
 
-	return http.StatusOK, User
+	return http.StatusOK, user
 }
 
 func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {

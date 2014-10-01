@@ -82,6 +82,14 @@ var data = []struct {
 				WithArgs("6").
 				WillReturnResult(sqlmock.NewResult(0, 0))
 		}, 404, `{"error":"can't find user with id 6"}`,
+	}, {
+		"/users/asdf", "GET", nil, func() {
+			sqlmock.ExpectPrepare()
+			sqlmock.ExpectQuery("select id, name from users where id=\\?").
+				WithArgs("asdf").
+				WillReturnRows(sqlmock.NewRows(userColumns).
+				FromCSVString(""))
+		}, 404, `{"error":"can't find user with id asdf"}`,
 	},
 }
 
