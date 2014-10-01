@@ -194,5 +194,4 @@ func check(err error) {
 func NotFound(w http.ResponseWriter, r *http.Request) {
 	url := "/"
 	http.Redirect(w, r, url, http.StatusFound)
-	return
 }
