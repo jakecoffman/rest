@@ -73,6 +73,9 @@ func main() {
 		http.ServeFile(w, r, "static/index.html")
 	})
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static", fileHandler))
+	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/404.html")
+	})
 
 	log.Println("Serving on", "0.0.0.0:8070")
 	http.ListenAndServe("0.0.0.0:8070", r)

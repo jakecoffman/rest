@@ -90,6 +90,8 @@ var data = []struct {
 				WillReturnRows(sqlmock.NewRows(userColumns).
 				FromCSVString(""))
 		}, 404, `{"error":"can't find user with id asdf"}`,
+	}, {
+		"/nonexistant", "GET", nil, func() {}, 404, `404 page not found`,
 	},
 }
 
