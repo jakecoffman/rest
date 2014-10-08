@@ -46,14 +46,14 @@ var data = []struct {
 		"/users/2", "PUT", strings.NewReader(`{"name":"Bob"}`), func() {
 			sqlmock.ExpectPrepare()
 			sqlmock.ExpectExec("update users set name=\\? where id=\\?").
-				WithArgs("Bob", "2").
+				WithArgs("Bob", 2).
 				WillReturnResult(sqlmock.NewResult(0, 1))
 		}, 200, `{"id":"2"}`,
 	}, {
 		"/users/3", "DELETE", nil, func() {
 			sqlmock.ExpectPrepare()
 			sqlmock.ExpectExec("delete from users where id=\\?").
-				WithArgs("3").
+				WithArgs(3).
 				WillReturnResult(sqlmock.NewResult(0, 1))
 		}, 200, `{"id":"3"}`,
 	}, {
@@ -72,16 +72,16 @@ var data = []struct {
 		"/users/4", "PUT", strings.NewReader(`{"name":"asdf"}`), func() {
 			sqlmock.ExpectPrepare()
 			sqlmock.ExpectExec("update users set name=\\? where id=\\?").
-				WithArgs("asdf", "4").
+				WithArgs("asdf", 4).
 				WillReturnResult(sqlmock.NewResult(0, 0))
-		}, 404, `{"error":"can't find user with id 4"}`,
+		}, 404, `{"error":"User not found"}`,
 	}, {
 		"/users/6", "DELETE", strings.NewReader(`{"name":"asdf"}`), func() {
 			sqlmock.ExpectPrepare()
 			sqlmock.ExpectExec("delete from users where id=\\?").
-				WithArgs("6").
+				WithArgs(6).
 				WillReturnResult(sqlmock.NewResult(0, 0))
-		}, 404, `{"error":"can't find user with id 6"}`,
+		}, 404, `{"error":"User not found"}`,
 	}, {
 		"/users/asdf", "GET", nil, func() {
 			sqlmock.ExpectPrepare()
@@ -89,13 +89,13 @@ var data = []struct {
 				WithArgs("asdf").
 				WillReturnRows(sqlmock.NewRows(userColumns).
 				FromCSVString(""))
-		}, 404, `{"error":"can't find user with id asdf"}`,
+		}, 400, `{"error":"id must be int64"}`,
 	}, {
 		"/nonexistant", "GET", nil, func() {}, 404, `404 page not found`,
 	},
 }
 
-func TestAllTheusers(t *testing.T) {
+func TestAllTheUsers(t *testing.T) {
 	for _, d := range data {
 		w := httptest.NewRecorder()
 		r, err := http.NewRequest(d.method, d.url, d.reqBody)
@@ -104,7 +104,7 @@ func TestAllTheusers(t *testing.T) {
 			t.Fatal(err)
 		}
 		d.expectations()
-		router(&context{db}).ServeHTTP(w, r)
+		router(&context{NewUserService(db)}).ServeHTTP(w, r)
 		if w.Code != d.expectedCode {
 			t.Errorf("expected %v got %v", d.expectedCode, w.Code)
 		}
