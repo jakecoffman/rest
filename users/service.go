@@ -1,8 +1,10 @@
-package main
+package users
 
 import (
 	"database/sql"
 	"errors"
+	"log"
+	"runtime/debug"
 )
 
 type User struct {
@@ -88,4 +90,14 @@ func (s userService) Delete(id int64) error {
 		return errors.New("User not found")
 	}
 	return nil
+}
+
+// TODO: Only call on errors that are unrecoverable as the server goes down
+// or handle panics and panic here
+func check(err error) {
+	if err != nil {
+		log.Println(err)
+		debug.PrintStack()
+		log.Fatal()
+	}
 }

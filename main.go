@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 
 	"github.com/gorilla/mux"
+	"github.com/jakecoffman/golang-rest-bootstrap/users"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -17,7 +18,7 @@ func init() {
 
 func router(db *sql.DB) *mux.Router {
 	r := mux.NewRouter()
-	NewUserController(r, NewUserService(db))
+	users.NewUserController(r, users.NewUserService(db))
 	return r
 }
 
@@ -53,8 +54,6 @@ func main() {
 	http.ListenAndServe("0.0.0.0:8070", r)
 }
 
-// TODO: Only call on errors that are unrecoverable as the server goes down
-// or handle panics and panic here
 func check(err error) {
 	if err != nil {
 		log.Println(err)
