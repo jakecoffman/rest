@@ -2,17 +2,72 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gorilla/mux"
 )
 
-func List(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
-	return http.StatusOK, c.userService.List()
+type Error struct {
+	Error string `json:"error"`
 }
 
-func Add(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+type UserController struct {
+	userService UserService
+}
+
+func NewUserController(r *mux.Router, s UserService) *UserController {
+	cont := UserController{s}
+	r.Handle("/users", cont)
+	r.Handle("/users/{id}", cont)
+	return &cont
+}
+
+func (u UserController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	code := http.StatusMethodNotAllowed
+	var data interface{}
+
+	defer func(c int) {
+		log.Println(r.URL, "-", r.Method, "-", code, r.RemoteAddr)
+	}(code)
+
+	if r.URL.Path == "/users" {
+		switch r.Method {
+		case "GET":
+			code, data = u.List(w, r)
+		case "POST":
+			code, data = u.Add(w, r)
+		default:
+			return
+		}
+	} else {
+		switch r.Method {
+		case "GET":
+			code, data = u.Get(w, r)
+		case "PUT":
+			code, data = u.Update(w, r)
+		case "DELETE":
+			code, data = u.Delete(w, r)
+		default:
+			return
+		}
+	}
+
+	w.WriteHeader(code)
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(data)
+	if err != nil {
+		log.Println("Failed to write data:", err)
+		code = http.StatusInternalServerError
+	}
+}
+
+func (u UserController) List(w http.ResponseWriter, r *http.Request) (int, interface{}) {
+	return http.StatusOK, u.userService.List()
+}
+
+func (u UserController) Add(w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	if r.Body == nil {
 		return http.StatusBadRequest, Error{"no payload"}
 	}
@@ -26,25 +81,25 @@ func Add(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) 
 		return 422, Error{"please provide 'name'"}
 	}
 
-	c.userService.Add(&user)
+	u.userService.Add(&user)
 	return http.StatusCreated, user
 }
 
-func Get(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+func (u UserController) Get(w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseInt(vars["id"], 10, 64)
 	if err != nil {
 		return http.StatusBadRequest, Error{"id must be int64"}
 	}
 
-	user, err := c.userService.Get(id)
+	user, err := u.userService.Get(id)
 	if err != nil {
 		return http.StatusNotFound, Error{err.Error()}
 	}
 	return http.StatusOK, user
 }
 
-func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+func (u UserController) Update(w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	if r.Body == nil {
 		return http.StatusBadRequest, Error{"no payload"}
 	}
@@ -63,7 +118,7 @@ func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{
 	}
 	user.Id = id
 
-	err = c.userService.Update(&user)
+	err = u.userService.Update(&user)
 
 	if err != nil {
 		return http.StatusNotFound, Error{err.Error()}
@@ -72,13 +127,13 @@ func Update(c *context, w http.ResponseWriter, r *http.Request) (int, interface{
 	return http.StatusOK, map[string]string{"id": vars["id"]}
 }
 
-func Delete(c *context, w http.ResponseWriter, r *http.Request) (int, interface{}) {
+func (u UserController) Delete(w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	vars := mux.Vars(r)
 	id, err := strconv.ParseInt(vars["id"], 10, 64)
 	if err != nil {
 		return http.StatusBadRequest, Error{"id should be int64"}
 	}
-	err = c.userService.Delete(id)
+	err = u.userService.Delete(id)
 	if err != nil {
 		return http.StatusNotFound, Error{err.Error()}
 	}

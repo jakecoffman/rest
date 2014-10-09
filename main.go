@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"flag"
 	"log"
 	"net/http"
@@ -16,35 +15,9 @@ func init() {
 	flag.Parse()
 }
 
-type context struct {
-	userService UserService
-}
-
-type appHandler struct {
-	*context
-	handler func(*context, http.ResponseWriter, *http.Request) (int, interface{})
-}
-
-func (t appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	code, data := t.handler(t.context, w, r)
-	w.WriteHeader(code)
-	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(data)
-	if err != nil {
-		log.Println("Failed to write data:", err)
-	}
-	log.Println(r.URL, "-", r.Method, "-", code, r.RemoteAddr)
-}
-
-func router(appCtx *context) *mux.Router {
+func router(db *sql.DB) *mux.Router {
 	r := mux.NewRouter()
-	// There are actually 2 options here: 1 - have 2 functions that handle both cases and
-	// internally switch on the method or 2 - have a function for each method
-	r.Handle("/users", appHandler{appCtx, List}).Methods("GET")
-	r.Handle("/users", appHandler{appCtx, Add}).Methods("POST")
-	r.Handle("/users/{id}", appHandler{appCtx, Get}).Methods("GET")
-	r.Handle("/users/{id}", appHandler{appCtx, Update}).Methods("PUT")
-	r.Handle("/users/{id}", appHandler{appCtx, Delete}).Methods("DELETE")
+	NewUserController(r, NewUserService(db))
 	return r
 }
 
@@ -67,7 +40,7 @@ func main() {
 	// handle all requests by serving a file of the same name
 	fileHandler := http.FileServer(http.Dir("static/"))
 
-	r := router(&context{NewUserService(db)})
+	r := router(db)
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/index.html")
 	})
@@ -80,11 +53,8 @@ func main() {
 	http.ListenAndServe("0.0.0.0:8070", r)
 }
 
-type Error struct {
-	Error string `json:"error"`
-}
-
 // TODO: Only call on errors that are unrecoverable as the server goes down
+// or handle panics and panic here
 func check(err error) {
 	if err != nil {
 		log.Println(err)

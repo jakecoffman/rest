@@ -104,7 +104,7 @@ func TestAllTheUsers(t *testing.T) {
 			t.Fatal(err)
 		}
 		d.expectations()
-		router(&context{NewUserService(db)}).ServeHTTP(w, r)
+		router(db).ServeHTTP(w, r)
 		if w.Code != d.expectedCode {
 			t.Errorf("expected %v got %v", d.expectedCode, w.Code)
 		}
