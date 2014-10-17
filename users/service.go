@@ -25,7 +25,7 @@ type userService struct {
 }
 
 func NewUserService(db *sql.DB) UserService {
-	return userService{db}
+	return &userService{db}
 }
 
 func (s userService) List() []*User {

@@ -1,4 +1,4 @@
-package main
+package users
 
 import (
 	"io"
@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/gorilla/mux"
 )
 
 var userColumns = []string{"o_id", "o_name"}
@@ -96,7 +97,7 @@ var data = []struct {
 }
 
 func TestAllTheUsers(t *testing.T) {
-	for _, d := range data {
+	for i, d := range data {
 		w := httptest.NewRecorder()
 		r, err := http.NewRequest(d.method, d.url, d.reqBody)
 		db, err := sqlmock.New()
@@ -104,12 +105,14 @@ func TestAllTheUsers(t *testing.T) {
 			t.Fatal(err)
 		}
 		d.expectations()
-		router(db).ServeHTTP(w, r)
+		router := mux.NewRouter()
+		NewUserController(router, NewUserService(db))
+		router.ServeHTTP(w, r)
 		if w.Code != d.expectedCode {
-			t.Errorf("expected %v got %v", d.expectedCode, w.Code)
+			t.Errorf("%v - expected %v got %v", i, d.expectedCode, w.Code)
 		}
 		if strings.TrimSpace(w.Body.String()) != d.expectedBody {
-			t.Errorf("expected %v got %v", d.expectedBody, w.Body.String())
+			t.Errorf("%v - expected %v got %v", i, d.expectedBody, w.Body.String())
 		}
 	}
 }
