@@ -84,13 +84,7 @@ var data = []struct {
 				WillReturnResult(sqlmock.NewResult(0, 0))
 		}, 404, `{"error":"User not found"}`,
 	}, {
-		"/users/asdf", "GET", nil, func() {
-			sqlmock.ExpectPrepare()
-			sqlmock.ExpectQuery("select id, name from users where id=\\?").
-				WithArgs("asdf").
-				WillReturnRows(sqlmock.NewRows(userColumns).
-				FromCSVString(""))
-		}, 400, `{"error":"id must be int64"}`,
+		"/users/asdf", "GET", nil, func() {}, 400, `{"error":"id must be int64"}`,
 	}, {
 		"/nonexistant", "GET", nil, func() {}, 404, `404 page not found`,
 	},
@@ -113,6 +107,9 @@ func TestAllTheUsers(t *testing.T) {
 		}
 		if strings.TrimSpace(w.Body.String()) != d.expectedBody {
 			t.Errorf("%v - expected %v got %v", i, d.expectedBody, w.Body.String())
+		}
+		if err = db.Close(); err != nil {
+			t.Errorf("%v -- Error '%s' unexpected when closing db", i, err)
 		}
 	}
 }
