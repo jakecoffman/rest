@@ -9,7 +9,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type errorResponse struct {
+type Error struct {
 	Error string `json:"error"`
 }
 
@@ -28,6 +28,10 @@ func (u UserController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	code := http.StatusMethodNotAllowed
 	var data interface{}
 
+	defer func(c int) {
+		log.Println(r.URL, "-", r.Method, "-", code, r.RemoteAddr)
+	}(code)
+
 	if r.URL.Path == "/users" {
 		switch r.Method {
 		case "GET":
@@ -35,7 +39,6 @@ func (u UserController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "POST":
 			code, data = u.Add(w, r)
 		default:
-			w.WriteHeader(code)
 			return
 		}
 	} else {
@@ -47,7 +50,6 @@ func (u UserController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "DELETE":
 			code, data = u.Delete(w, r)
 		default:
-			w.WriteHeader(code)
 			return
 		}
 	}
@@ -67,16 +69,16 @@ func (u UserController) List(w http.ResponseWriter, r *http.Request) (int, inter
 
 func (u UserController) Add(w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	if r.Body == nil {
-		return http.StatusBadRequest, errorResponse{"no payload"}
+		return http.StatusBadRequest, Error{"no payload"}
 	}
 	decoder := json.NewDecoder(r.Body)
 	var user User
 	err := decoder.Decode(&user)
 	if err != nil {
-		return http.StatusBadRequest, errorResponse{"can't parse json payload"}
+		return http.StatusBadRequest, Error{"can't parse json payload"}
 	}
 	if user.Name == "" {
-		return 422, errorResponse{"please provide 'name'"}
+		return 422, Error{"please provide 'name'"}
 	}
 
 	u.userService.Add(&user)
@@ -87,39 +89,39 @@ func (u UserController) Get(w http.ResponseWriter, r *http.Request) (int, interf
 	vars := mux.Vars(r)
 	id, err := strconv.ParseInt(vars["id"], 10, 64)
 	if err != nil {
-		return http.StatusBadRequest, errorResponse{"id must be int64"}
+		return http.StatusBadRequest, Error{"id must be int64"}
 	}
 
 	user, err := u.userService.Get(id)
 	if err != nil {
-		return http.StatusNotFound, errorResponse{err.Error()}
+		return http.StatusNotFound, Error{err.Error()}
 	}
 	return http.StatusOK, user
 }
 
 func (u UserController) Update(w http.ResponseWriter, r *http.Request) (int, interface{}) {
 	if r.Body == nil {
-		return http.StatusBadRequest, errorResponse{"no payload"}
+		return http.StatusBadRequest, Error{"no payload"}
 	}
 	vars := mux.Vars(r)
 	var user User
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
-		return http.StatusBadRequest, errorResponse{"can't parse json payload"}
+		return http.StatusBadRequest, Error{"can't parse json payload"}
 	}
 	if user.Name == "" {
-		return 422, errorResponse{"please provide 'name'"}
+		return 422, Error{"please provide 'name'"}
 	}
 	id, err := strconv.ParseInt(vars["id"], 10, 64)
 	if err != nil {
-		return http.StatusBadRequest, errorResponse{"id must be int64"}
+		return http.StatusBadRequest, Error{"id must be int64"}
 	}
 	user.Id = id
 
 	err = u.userService.Update(&user)
 
 	if err != nil {
-		return http.StatusNotFound, errorResponse{err.Error()}
+		return http.StatusNotFound, Error{err.Error()}
 	}
 
 	return http.StatusOK, map[string]string{"id": vars["id"]}
@@ -129,11 +131,11 @@ func (u UserController) Delete(w http.ResponseWriter, r *http.Request) (int, int
 	vars := mux.Vars(r)
 	id, err := strconv.ParseInt(vars["id"], 10, 64)
 	if err != nil {
-		return http.StatusBadRequest, errorResponse{"id should be int64"}
+		return http.StatusBadRequest, Error{"id should be int64"}
 	}
 	err = u.userService.Delete(id)
 	if err != nil {
-		return http.StatusNotFound, errorResponse{err.Error()}
+		return http.StatusNotFound, Error{err.Error()}
 	}
 
 	return http.StatusOK, map[string]string{"id": vars["id"]}

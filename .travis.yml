@@ -3,5 +3,3 @@ install:
  - go get "github.com/DATA-DOG/go-sqlmock"
  - go get "github.com/gorilla/mux"
  - go get "github.com/mattn/go-sqlite3"
- - go get "github.com/codegangsta/negroni"
- - go get "github.com/goincremental/negroni-sessions"

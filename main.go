@@ -5,18 +5,15 @@ import (
 	"flag"
 	"log"
 	"net/http"
-	"os"
 	"runtime/debug"
 
-	"github.com/codegangsta/negroni"
-	"github.com/goincremental/negroni-sessions"
 	"github.com/gorilla/mux"
 	"github.com/jakecoffman/golang-rest-bootstrap/users"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func init() {
-	flag.Parse() // TODO
+	flag.Parse()
 }
 
 func main() {
@@ -37,19 +34,8 @@ func main() {
 		http.ServeFile(w, r, "static/404.html")
 	})
 
-	n := negroni.Classic()
-	store := sessions.NewCookieStore([]byte("secret"))
-	n.Use(sessions.Sessions("my_session", store))
-
-	n.UseHandler(r)
-
-	// enables gin autoreloading
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3000"
-	}
-
-	n.Run(":" + port)
+	log.Println("Serving on", "0.0.0.0:8070")
+	http.ListenAndServe("0.0.0.0:8070", r)
 }
 
 func check(err error) {
