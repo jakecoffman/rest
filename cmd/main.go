@@ -1,50 +1,50 @@
 package main
 
 import (
-	"database/sql"
-	"flag"
-	"log"
 	"net/http"
-	"os"
-	"runtime/debug"
 
-	"github.com/gorilla/context"
-	"github.com/gorilla/mux"
-	"github.com/jakecoffman/golang-rest-bootstrap/users"
+	"github.com/gin-gonic/gin"
+	"github.com/jakecoffman/golang-rest-bootstrap/user"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/jmoiron/sqlx"
 )
 
-func init() {
-	flag.Parse()
-}
-
 func main() {
-	db, err := sql.Open("sqlite3", "./gorunner.db")
+	db, err := sqlx.Connect("sqlite3", "./gorunner.db")
 	check(err)
 	defer db.Close()
 
-	// handle all requests by serving a file of the same name
-	fileHandler := http.FileServer(http.Dir("../static/"))
+	router := gin.Default()
 
-	r := mux.NewRouter()
-	users.Init(r, db)
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "../static/index.html")
-	})
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static", fileHandler))
-	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "../static/404.html")
-	})
+	// Bootstrap database
+	_, err = db.Exec(`create table if not exists users (
+		id integer not null primary key,
+		name text,
+		CHECK(name <> ''),
+		UNIQUE(id, name)
+	);`)
+	check(err)
+	_, err = db.Exec("insert or ignore into users values (1, 'admin')")
+	check(err)
 
-	port := os.Getenv("PORT")
-	log.Println("Serving on", ":"+port)
-	http.ListenAndServe(":"+port, context.ClearHandler(r))
+	userService := user.NewService(db)
+	userController := user.NewController(userService)
+
+	router.Handle("GET", "/", func(c *gin.Context) {
+		c.Redirect(http.StatusFound, "/users")
+	})
+	router.Handle("GET", "/users", userController.List)
+	router.Handle("GET", "/users/:id", userController.Get)
+	router.Handle("POST", "/users", userController.Add)
+	router.Handle("PUT", "/users/:id", userController.Update)
+	router.Handle("DELETE", "/users/:id", userController.Delete)
+
+	port := "0.0.0.0:8099"
+	router.Run(port)
 }
 
 func check(err error) {
 	if err != nil {
-		log.Println(err)
-		debug.PrintStack()
-		log.Fatal()
+		panic(err)
 	}
 }
