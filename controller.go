@@ -1,9 +1,8 @@
-package lib
+package rest
 
 import (
 	"net/http"
 	"strconv"
-
 	"github.com/gin-gonic/gin"
 	"net/url"
 	"errors"
@@ -45,14 +44,14 @@ type Repository interface {
 }
 
 type controller struct {
-	resource Resource
+	resource   Resource
 	repository Repository
 }
 
 func NewController(repository Repository, resource Resource) *controller {
 	return &controller{
 		repository: repository,
-		resource: resource,
+		resource:   resource,
 	}
 }
 

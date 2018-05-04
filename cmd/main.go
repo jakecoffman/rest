@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jakecoffman/golang-rest-bootstrap/user"
+	"github.com/jakecoffman/rest/user"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/jmoiron/sqlx"
-	"github.com/jakecoffman/golang-rest-bootstrap/lib"
+	"github.com/jakecoffman/rest"
 )
 
 func main() {
@@ -31,12 +31,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_id_uindex ON users (id);`)
 	check(err)
 
 	userService := user.NewResource(db)
-	userController := lib.NewController(userService, user.User{})
+	userController := rest.NewController(userService, user.User{})
 
 	router.Handle("GET", "/", func(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/users")
 	})
-	lib.StdRoutes(router.Group("/users"), userController)
+	rest.StdRoutes(router.Group("/users"), userController)
 
 	port := "0.0.0.0:8099"
 	router.Run(port)

@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/jakecoffman/golang-rest-bootstrap/lib"
+	"github.com/jakecoffman/rest"
 	"net/url"
 )
 
@@ -14,7 +14,7 @@ type User struct {
 	Name string `json:"name"`
 }
 
-func (u User) Get() lib.Resource {
+func (u User) Get() rest.Resource {
 	return User{}
 }
 
@@ -81,7 +81,7 @@ func (s Repository) Update(id int, resource interface{}) (interface{}, error) {
 		return resource, err
 	}
 	if i == 0 {
-		return resource, lib.ErrNotFound
+		return resource, rest.ErrNotFound
 	}
 	return resource, nil
 }
@@ -96,7 +96,7 @@ func (s Repository) Delete(id int) error {
 		return err
 	}
 	if i == 0 {
-		return lib.ErrNotFound
+		return rest.ErrNotFound
 	}
 	return nil
 }
