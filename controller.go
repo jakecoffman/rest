@@ -1,14 +1,16 @@
 package rest
 
 import (
-	"net/http"
-	"strconv"
-	"github.com/gin-gonic/gin"
-	"net/url"
 	"errors"
+	"log"
+	"net/http"
+	"net/url"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
 )
 
-type Rest interface {
+type GinRest interface {
 	List(*gin.Context)
 	Get(*gin.Context)
 	Add(*gin.Context)
@@ -16,12 +18,22 @@ type Rest interface {
 	Delete(*gin.Context)
 }
 
-func StdRoutes(group *gin.RouterGroup, rest Rest) {
-	group.Handle("GET", "", rest.List)
-	group.Handle("GET", "/:id", rest.Get)
-	group.Handle("POST", "", rest.Add)
-	group.Handle("PUT", "/:id", rest.Update)
-	group.Handle("DELETE", "/:id", rest.Delete)
+func StdRoutes(group *gin.RouterGroup, rest GinRest) {
+	if rest.List != nil {
+		group.Handle("GET", "", rest.List)
+	}
+	if rest.Get != nil {
+		group.Handle("GET", "/:id", rest.Get)
+	}
+	if rest.Add != nil {
+		group.Handle("POST", "", rest.Add)
+	}
+	if rest.Update != nil {
+		group.Handle("PUT", "/:id", rest.Update)
+	}
+	if rest.Delete != nil {
+		group.Handle("DELETE", "/:id", rest.Delete)
+	}
 }
 
 type Error struct {
@@ -32,31 +44,31 @@ var ErrNotFound = errors.New("not found")
 
 type Resource interface {
 	Get() Resource
-	Valid() error
 }
 
-type Repository interface {
+type Crud interface {
 	List(params url.Values) (interface{}, error)
-	Add(resource interface{}) (interface{}, error)
+	Create(resource interface{}) (interface{}, error)
 	Get(id int) (interface{}, error)
 	Update(id int, resource interface{}) (interface{}, error)
 	Delete(id int) error
 }
 
 type controller struct {
-	resource   Resource
-	repository Repository
+	GinRest
+	resource Resource
+	restful  Crud
 }
 
-func NewController(repository Repository, resource Resource) *controller {
+func NewController(restful Crud, resource Resource) *controller {
 	return &controller{
-		repository: repository,
-		resource:   resource,
+		restful:  restful,
+		resource: resource,
 	}
 }
 
 func (c controller) List(ctx *gin.Context) {
-	if resources, err := c.repository.List(ctx.Request.URL.Query()); err != nil {
+	if resources, err := c.restful.List(ctx.Request.URL.Query()); err != nil {
 		ctx.JSON(http.StatusInternalServerError, Error{err.Error()})
 	} else {
 		ctx.JSON(http.StatusOK, resources)
@@ -66,15 +78,12 @@ func (c controller) List(ctx *gin.Context) {
 func (c controller) Add(ctx *gin.Context) {
 	resource := c.resource.Get()
 	if err := ctx.ShouldBindJSON(resource); err != nil {
+		log.Println(err)
 		ctx.JSON(http.StatusBadRequest, Error{"Can't parse JSON payload"})
 		return
 	}
-	if err := resource.Valid(); err != nil {
-		ctx.JSON(http.StatusUnprocessableEntity, Error{err.Error()})
-		return
-	}
 
-	if u, err := c.repository.Add(resource); err != nil {
+	if u, err := c.restful.Create(resource); err != nil {
 		ctx.JSON(http.StatusInternalServerError, Error{err.Error()})
 	} else {
 		ctx.JSON(http.StatusCreated, u)
@@ -88,7 +97,7 @@ func (c controller) Get(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.repository.Get(id)
+	user, err := c.restful.Get(id)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, Error{err.Error()})
 		return
@@ -107,11 +116,7 @@ func (c controller) Update(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, Error{"can't parse json payload"})
 		return
 	}
-	if err := user.Valid(); err != nil {
-		ctx.JSON(http.StatusUnprocessableEntity, Error{err.Error()})
-		return
-	}
-	if u, err := c.repository.Update(id, user); err != nil {
+	if u, err := c.restful.Update(id, user); err != nil {
 		if err == ErrNotFound {
 			ctx.JSON(http.StatusNotFound, Error{err.Error()})
 		} else {
@@ -129,7 +134,7 @@ func (c controller) Delete(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, Error{"id must be int"})
 		return
 	}
-	if err = c.repository.Delete(id); err != nil {
+	if err = c.restful.Delete(id); err != nil {
 		if err == ErrNotFound {
 			ctx.JSON(http.StatusNotFound, Error{err.Error()})
 		} else {

@@ -1,16 +1,19 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jakecoffman/rest/user"
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/jmoiron/sqlx"
 	"github.com/jakecoffman/rest"
+	"github.com/jakecoffman/rest/example/user"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	db, err := sqlx.Connect("sqlite3", "./gorunner.db")
 	check(err)
 	defer db.Close()
@@ -30,7 +33,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_id_uindex ON users (id);`)
 	_, err = db.Exec("insert or ignore into users values (2, 'bob')")
 	check(err)
 
-	userService := user.NewResource(db)
+	userService := user.NewUserRepository(db)
 	userController := rest.NewController(userService, user.User{})
 
 	router.Handle("GET", "/", func(c *gin.Context) {
